@@ -1,60 +1,60 @@
 ﻿using System;
-using System.IO;
+using System.Collections.Generic;
 using System.Net.Http;
+using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace lesson1
 {
-    class Program
+    internal class Program
     {
-        static readonly HttpClient client = new HttpClient();
-
-        static async Task Main()
+        private static readonly CancellationTokenSource cancellationToken = new(1000);
+        static void Main()
         {
-            string docPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop) + @"/response";
-            if (!Directory.Exists(docPath))
+            var taskPool = new List<Task<Message>>();
+
+            for (int i = 4; i <= 13; i++)
             {
-                Directory.CreateDirectory(docPath);
+                taskPool.Add(GetMessage(i, cancellationToken));
             }
 
-            string documentContents; //Переменная для хранения строк запросов;
+            try
+            {
+                Task.WaitAll(taskPool.ToArray());
+            }
+            catch (Exception)
+            {
+            }
 
-            for (int i = 1; i < 4; i++) {
-                try
+            foreach (var task in taskPool)
+            {
+                if (task.IsCanceled)
                 {
-                    /*
-
-                    HttpResponseMessage response = await client.GetAsync($"https://jsonplaceholder.typicode.com/posts/{i}");
-
-                    response.EnsureSuccessStatusCode();
-
-                    string responseBody = await response.Content.ReadAsStringAsync();
-
-                    var responseBody1 = await response.Content.ReadAsStreamAsync();
-                    */
-
-                    string responseBody = await client.GetStringAsync($"https://jsonplaceholder.typicode.com/posts/{i}");
-
-                    Console.WriteLine(responseBody);
-
-                    /*
-                    using (StreamReader input = new StreamReader(responseBody1))
-                    {
-                        documentContents = input.ReadToEnd();
-                    }
-
-                    using (StreamWriter outputFile = new StreamWriter(Path.Combine(docPath, "response" + i + ".txt"), true))
-                    {
-                        outputFile.WriteLine(documentContents);
-                    }
-                    */
+                    continue;
                 }
-                catch (HttpRequestException e)
-                {
-                    Console.WriteLine("\nException Caught!");
-                    Console.WriteLine("Message :{0} ", e.Message);
-                }
+                ResultCreator.CreateFile(task.Result);
+            }
+
+        }
+
+        private static async Task<Message> GetMessage(int id, CancellationTokenSource cancelToken)
+        {
+            using var client = new HttpClient();
+
+            try
+            {
+                string response = await client.GetStringAsync("https://jsonplaceholder.typicode.com/posts/" + id, cancelToken.Token);
+                Message message = JsonSerializer.Deserialize<Message>(response, new JsonSerializerOptions(){PropertyNameCaseInsensitive = true});
+
+                return message;
+            }
+
+            catch (Exception)
+            {
+                throw;
             }
         }
+
     }
 }
